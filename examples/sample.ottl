@@ -1,0 +1,9 @@
+# OTTL Lens — sample statements you can dry-run.
+# Command Palette → "OTTL: Dry Run", pick Logs, click Run.
+# These use `log.`-prefixed paths so the engine infers the log context.
+# (Inline `#` comments like this are stripped before the engine runs.)
+
+set(log.attributes["env"], "production")
+set(log.attributes["env.upper"], ConvertCase(log.attributes["env"], "upper"))
+keep_keys(log.attributes, ["env", "env.upper", "http.method"])
+limit(log.attributes, 10, [])

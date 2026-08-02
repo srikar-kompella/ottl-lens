@@ -1,0 +1,101 @@
+{
+  "name": "ottl-lens",
+  "displayName": "OTTL Lens (community)",
+  "description": "Syntax highlighting, in-editor linting, and offline dry-run for the OpenTelemetry Transformation Language (OTTL). Community project, not affiliated with or endorsed by the OpenTelemetry project or CNCF.",
+  "version": "0.1.1",
+  "publisher": "srikar-kompella",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/srikar-kompella/ottl-lens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/srikar-kompella/ottl-lens/issues"
+  },
+  "homepage": "https://github.com/srikar-kompella/ottl-lens#readme",
+  "author": "Srikar Kompella",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "ottl",
+    "observability",
+    "collector"
+  ],
+  "activationEvents": [
+    "onLanguage:ottl",
+    "onLanguage:yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ottl",
+        "aliases": [
+          "OTTL",
+          "ottl"
+        ],
+        "extensions": [
+          ".ottl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ottl",
+        "scopeName": "source.ottl",
+        "path": "./syntaxes/ottl.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ottl.lintActiveFile",
+        "title": "OTTL: Lint Active File"
+      },
+      {
+        "command": "ottl.dryRun",
+        "title": "OTTL: Dry Run (run statements against sample telemetry)"
+      }
+    ],
+    "configuration": {
+      "title": "OTTL Lens",
+      "properties": {
+        "ottl.lint.unknownFunctions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when a function call is not in the known OTTL editor/converter catalog."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "typecheck": "tsc --noEmit -p ./",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "gen:catalog": "node scripts/gen-catalog.mjs",
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "bundle": "node esbuild.js",
+    "vscode:prepublish": "node esbuild.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.84.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}

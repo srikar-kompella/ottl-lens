@@ -1,0 +1,58 @@
+# Sample OpenTelemetry Collector config for trying OTTL Lens.
+#  • Linting: the transform/lint-demo + filter blocks contain intentional mistakes
+#    that should get squiggles.
+#  • Dry-run: put your cursor inside the transform/logs block below (valid statements)
+#    and run "OTTL: Dry Run" → pick Logs → Run to see the transformed output.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  # --- transform: valid statements — put your cursor here and run "OTTL: Dry Run" ---
+  transform/logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(log.attributes["env"], "production")
+          - set(log.attributes["env.upper"], ConvertCase(log.attributes["env"], "upper"))
+          - keep_keys(log.attributes, ["env", "env.upper", "http.method"])
+
+  # --- transform: intentional mistakes — for the linter (do not dry-run) ---
+  transform/lint-demo:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(log.attributes["parsed"], ParseJson(body))   # WARN: unknown fn (did you mean ParseJSON?)
+          - set(log.attributes["bad"] = "x")                 # ERROR: single '='
+          - keep_keys(log.attributes, ["a", "b")             # ERROR: unbalanced ] vs )
+
+  # --- filter: new style ---
+  filter/drop-noise:
+    error_mode: ignore
+    log_conditions:
+      - IsMatch(log.body, ".*healthcheck.*")                # ok
+      - not_a_function(log.body)                            # WARN: unknown function
+      - IsMatch(log.body, ".*oops                          # ERROR: unterminated string
+
+exporters:
+  debug: {}
+
+connectors:
+  routing:
+    default_pipelines: [logs/all]
+    table:
+      - context: resource
+        statement: route where attributes["tenant"] == "acme"   # ok (route() is valid here)
+        pipelines: [logs/acme]
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [transform/logs, filter/drop-noise]
+      exporters: [debug]

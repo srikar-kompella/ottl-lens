@@ -1,0 +1,14 @@
+node_modules/
+out/
+*.vsix
+.DS_Store
+.tmp/
+coverage/
+# WASM build artifacts (built locally via npm run build:wasm)
+media/ottl.wasm
+media/wasm_exec.js
+
+# internal / private — do NOT publish
+.claude/
+docs/
+*.vsix
