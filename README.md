@@ -31,7 +31,9 @@ Diagnostics update on open and on edit. Strings and `#` comments are masked, so 
 
 ## Getting started
 
-1. Install **OTTL Lens** from [Open VSX](https://open-vsx.org/extension/srikar-kompella/ottl-lens) — or search "OTTL Lens" in the Extensions view of **Cursor, Windsurf, VSCodium, or Gitpod** (which use the Open VSX registry).
+1. Install **OTTL Lens**:
+   - **VS Code** — from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=srikar-kompella.ottl-lens), or search "OTTL Lens" in the Extensions view.
+   - **Cursor, Windsurf, VSCodium, Gitpod** — from [Open VSX](https://open-vsx.org/extension/srikar-kompella/ottl-lens), or search "OTTL Lens" in the Extensions view (these editors use the Open VSX registry).
 2. Open a Collector config (`otelcol.yaml`) or a `.ottl` file — linting runs automatically.
 3. Fix the squiggles. That's it.
 
