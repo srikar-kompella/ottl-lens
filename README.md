@@ -31,11 +31,9 @@ Diagnostics update on open and on edit. Strings and `#` comments are masked, so 
 
 ## Getting started
 
-1. Install **OTTL Lens** from the VS Code Extensions view (search "OTTL Lens") once published, or install the packaged `.vsix`.
+1. Install **OTTL Lens** from [Open VSX](https://open-vsx.org/extension/srikar-kompella/ottl-lens) — or search "OTTL Lens" in the Extensions view of **Cursor, Windsurf, VSCodium, or Gitpod** (which use the Open VSX registry).
 2. Open a Collector config (`otelcol.yaml`) or a `.ottl` file — linting runs automatically.
 3. Fix the squiggles. That's it.
-
-*(Not yet on the Marketplace — build locally for now; see "Develop" below.)*
 
 ## Dry-run
 
