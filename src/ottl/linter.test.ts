@@ -166,3 +166,21 @@ describe("multi-line + multiple diagnostics", () => {
     expect(lint("")).toEqual([]);
   });
 });
+
+describe("removed and newer functions", () => {
+  it("flags a function removed upstream as info, with its replacement", () => {
+    const d = lint('set(log.attributes["d"], Base64Decode(log.body))');
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ severity: "info", code: "ottl.removedFunction" });
+    expect(d[0].message).toMatch(/Use Decode\(value, "base64"\) instead/);
+  });
+
+  it("accepts functions that exist only in newer OTTL (no false positive)", () => {
+    expect(lint("clear(log.attributes)")).toEqual([]);
+    expect(lint('set(log.attributes["e"], IsEmpty(log.body))')).toEqual([]);
+  });
+
+  it("accepts component-scoped and profiles functions", () => {
+    expect(lint('set(log.attributes["p"], ProfileID(x))')).toEqual([]);
+  });
+});

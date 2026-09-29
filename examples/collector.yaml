@@ -19,6 +19,11 @@ processors:
         statements:
           - set(log.attributes["env"], "production")
           - set(log.attributes["env.upper"], ConvertCase(log.attributes["env"], "upper"))
+          # ↓ runs fine, but changes nothing — "env" is already "production"
+          - set(log.attributes["env"], "production")
+          # ↓ the statement is valid, but its guard matches no record in the sample payload
+          - set(log.attributes["tier"], "gold") where log.attributes["plan"] == "enterprise"
+          # ↓ silently drops "environment" — watch the removed line in the diff
           - keep_keys(log.attributes, ["env", "env.upper", "http.method"])
 
   # --- transform: intentional mistakes — for the linter (do not dry-run) ---

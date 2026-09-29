@@ -13,9 +13,10 @@
  */
 
 import { KNOWN_FUNCTIONS, CASEFOLD_INDEX } from "./catalog";
-import { EXTRA_KNOWN } from "./extras";
+import { EXTRA_KNOWN, REMOVED_REPLACEMENTS } from "./extras";
+import { REMOVED_UPSTREAM } from "./catalog";
 
-export type Severity = "error" | "warning";
+export type Severity = "error" | "warning" | "info";
 
 export interface Diagnostic {
   line: number; // 0-based
@@ -106,6 +107,20 @@ function checkFunctions(masked: string, line: number, diags: Diagnostic[]): void
   while ((m = re.exec(masked)) !== null) {
     const name = m[1];
     if (LANG_WORDS.has(name)) continue;
+    if (REMOVED_UPSTREAM.has(name) && !EXTRA_KNOWN.has(name)) {
+      // Still works on older collectors (and in the bundled engine), so not a warning.
+      const replacement = REMOVED_REPLACEMENTS[name];
+      diags.push({
+        line,
+        startCol: m.index,
+        endCol: m.index + name.length,
+        message: `"${name}" has been removed from the latest OTTL.` +
+          (replacement ? ` Use ${replacement} instead.` : " It only works on older collector versions."),
+        severity: "info",
+        code: "ottl.removedFunction"
+      });
+      continue;
+    }
     if (KNOWN_FUNCTIONS.has(name) || EXTRA_KNOWN.has(name)) continue;
     const suggestion = CASEFOLD_INDEX.get(name.toLowerCase());
     const hint = suggestion ? ` Did you mean "${suggestion}"?` : "";

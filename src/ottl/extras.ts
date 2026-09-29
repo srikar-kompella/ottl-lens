@@ -10,4 +10,14 @@
 export const EXTRA_KNOWN: ReadonlySet<string> = new Set([
   // routing connector — decides which pipeline(s) a signal is sent to.
   "route",
+  // profiles converter; documented in pkg/ottl/contexts/xprofile, not ottlfuncs.
+  "ProfileID",
 ]);
+
+/**
+ * Replacements for functions removed from the latest OTTL reference (verified
+ * against contrib source: func_base64decode.go is gone, Decode is registered).
+ */
+export const REMOVED_REPLACEMENTS: Readonly<Record<string, string>> = {
+  Base64Decode: 'Decode(value, "base64")',
+};

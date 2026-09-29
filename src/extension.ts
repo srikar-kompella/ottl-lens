@@ -3,14 +3,15 @@ import { lint, Severity, Diagnostic as OttlDiagnostic } from "./ottl/linter";
 import { extractOTTL } from "./ottl/yaml";
 import { initWasm } from "./ottl/wasmRunner";
 import { DryRunPanel } from "./panel/dryRunPanel";
+import { registerAssistProviders } from "./providers";
 
 const COLLECTION_NAME = "ottl";
 const YAML_LANGS = new Set(["yaml", "yml"]);
 
 function toVscodeSeverity(sev: Severity): vscode.DiagnosticSeverity {
-  return sev === "error"
-    ? vscode.DiagnosticSeverity.Error
-    : vscode.DiagnosticSeverity.Warning;
+  if (sev === "error") return vscode.DiagnosticSeverity.Error;
+  if (sev === "info") return vscode.DiagnosticSeverity.Information;
+  return vscode.DiagnosticSeverity.Warning;
 }
 
 function toVscodeDiag(d: OttlDiagnostic, lineOffset: number, colOffset: number): vscode.Diagnostic {
@@ -65,6 +66,7 @@ function lintDocument(
 export function activate(context: vscode.ExtensionContext): void {
   const collection = vscode.languages.createDiagnosticCollection(COLLECTION_NAME);
   context.subscriptions.push(collection);
+  registerAssistProviders(context);
 
   if (vscode.window.activeTextEditor) {
     lintDocument(vscode.window.activeTextEditor.document, collection);
