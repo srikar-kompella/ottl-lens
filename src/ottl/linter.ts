@@ -14,7 +14,15 @@
 
 import { KNOWN_FUNCTIONS, CASEFOLD_INDEX } from "./catalog";
 import { EXTRA_KNOWN, REMOVED_REPLACEMENTS } from "./extras";
-import { REMOVED_UPSTREAM } from "./catalog";
+import { REMOVED_UPSTREAM, EXPERIMENTAL_FUNCTIONS, FEATURE_GATES } from "./catalog";
+
+/** "requires the ottl.functions.enableLambda feature gate (alpha since v0.155.0, off by default)". */
+export function describeGate(gate: string): string {
+  const g = FEATURE_GATES[gate];
+  if (!g) return `the \`${gate}\` feature gate`;
+  const off = g.stage === "alpha" ? ", off by default" : "";
+  return `the \`${gate}\` feature gate (${g.stage} since ${g.since}${off})`;
+}
 
 export type Severity = "error" | "warning" | "info";
 
@@ -121,6 +129,21 @@ function checkFunctions(masked: string, line: number, diags: Diagnostic[]): void
       });
       continue;
     }
+    const gate = EXPERIMENTAL_FUNCTIONS[name];
+    if (gate) {
+      // Valid, but the collector rejects it unless the gate is enabled.
+      const stage = FEATURE_GATES[gate]?.stage;
+      diags.push({
+        line,
+        startCol: m.index,
+        endCol: m.index + name.length,
+        message: `"${name}" is experimental and needs ${describeGate(gate)}.` +
+          (stage === "alpha" ? ` Start the collector with --feature-gates=${gate}, or it will reject this config.` : ""),
+        severity: "info",
+        code: "ottl.experimentalFunction"
+      });
+      continue;
+    }
     if (KNOWN_FUNCTIONS.has(name) || EXTRA_KNOWN.has(name)) continue;
     const suggestion = CASEFOLD_INDEX.get(name.toLowerCase());
     const hint = suggestion ? ` Did you mean "${suggestion}"?` : "";
@@ -140,8 +163,8 @@ function checkSingleEquals(masked: string, line: number, diags: Diagnostic[]): v
     if (masked[i] !== "=") continue;
     const prev = masked[i - 1];
     const next = masked[i + 1];
-    // part of ==, !=, <=, >= → fine
-    if (next === "=" || prev === "=" || prev === "!" || prev === "<" || prev === ">") continue;
+    // part of ==, !=, <=, >= → fine; "=>" is a lambda arrow: (_, v) => v == "x"
+    if (next === "=" || next === ">" || prev === "=" || prev === "!" || prev === "<" || prev === ">") continue;
     diags.push({
       line,
       startCol: i,

@@ -27,6 +27,15 @@ describe("hover", () => {
     expect(hoverAt(text, col)!.markdown).toMatch(/Added after v0\.146\.0/);
   });
 
+  it("marks experimental lambda functions with their feature gate", () => {
+    const md = functionMarkdown("Filter")!;
+    expect(md).toMatch(/Experimental — needs the `ottl\.functions\.enableLambda` feature gate/);
+    expect(md).toMatch(/xottl\/ottlfuncs\/README\.md#filter/);
+    const { text, col } = at('set(x, Filter(log.attributes["t"], (_, v) => v == "a"))');
+    expect(completionsAt(text, text.indexOf("Filter") + 3).items.find((i) => i.label === "Filter")!.detail).toMatch(/experimental/);
+    void col;
+  });
+
   it("notes a removed function and its replacement", () => {
     expect(functionMarkdown("Base64Decode")).toMatch(/Removed from the latest OTTL — use `Decode\(value, "base64"\)`/);
   });

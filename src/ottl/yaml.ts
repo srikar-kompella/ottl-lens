@@ -25,6 +25,17 @@ export interface ExtractedOTTL {
   dialect: Dialect;
   /** YAML key path that located this string (for debugging / diagnostics). */
   keyPath: string;
+  /**
+   * The error_mode that applies: the statement group's own `error_mode` if set,
+   * else the component's top-level `error_mode`, else null (version-dependent default).
+   */
+  errorMode: string | null;
+}
+
+function scalarAt(map: unknown, key: string): string | null {
+  if (!isMap(map)) return null;
+  const n = map.get(key, true);
+  return isScalar(n) && n.value !== null && n.value !== undefined ? String(n.value) : null;
 }
 
 const SIGNAL_KEYS: Record<string, string> = {
@@ -96,6 +107,7 @@ export function extractOTTL(yamlText: string): ExtractedOTTL[] {
 
 function walkTransformFilter(compId: string, type: string, value: unknown, out: ExtractedOTTL[], lc: any): void {
   if (!isMap(value)) return;
+  const procMode = scalarAt(value, "error_mode");
   for (const grp of value.items) {
     if (!isScalar(grp.key)) continue;
     const key = String(grp.key.value);
@@ -107,17 +119,18 @@ function walkTransformFilter(compId: string, type: string, value: unknown, out: 
       for (const el of grp.value.items) {
         if (isScalar(el)) {
           // flat string form
-          pushScalar(el, out, lc, { component: compId, context: null, signal, dialect, keyPath: `${compId}.${key}[]` });
+          pushScalar(el, out, lc, { component: compId, context: null, signal, dialect, keyPath: `${compId}.${key}[]`, errorMode: procMode });
         } else if (isMap(el)) {
-          // advanced form: { context, conditions[], statements[] }
+          // advanced form: { context, error_mode, conditions[], statements[] }
           const ctxNode = el.get("context", true);
           const ctx = isScalar(ctxNode) ? String(ctxNode.value) : null;
+          const groupMode = scalarAt(el, "error_mode") ?? procMode;
           for (const sub of ["statements", "conditions"]) {
             const arr = el.get(sub, true);
             if (isSeq(arr)) {
               const d: Dialect = sub === "conditions" ? "condition" : "statement";
               for (const s of arr.items) {
-                if (isScalar(s)) pushScalar(s, out, lc, { component: compId, context: ctx, signal, dialect: d, keyPath: `${compId}.${key}[].${sub}[]` });
+                if (isScalar(s)) pushScalar(s, out, lc, { component: compId, context: ctx, signal, dialect: d, keyPath: `${compId}.${key}[].${sub}[]`, errorMode: groupMode });
               }
             }
           }
@@ -131,7 +144,7 @@ function walkTransformFilter(compId: string, type: string, value: unknown, out: 
         if (!isScalar(ctxGrp.key) || !isSeq(ctxGrp.value)) continue;
         const ctx = String(ctxGrp.key.value); // e.g. span, log_record, resource
         for (const s of ctxGrp.value.items) {
-          if (isScalar(s)) pushScalar(s, out, lc, { component: compId, context: ctx, signal: key, dialect: "condition", keyPath: `${compId}.${key}.${ctx}[]` });
+          if (isScalar(s)) pushScalar(s, out, lc, { component: compId, context: ctx, signal: key, dialect: "condition", keyPath: `${compId}.${key}.${ctx}[]`, errorMode: procMode });
         }
       }
     }
@@ -140,6 +153,7 @@ function walkTransformFilter(compId: string, type: string, value: unknown, out: 
 
 function walkRouting(compId: string, value: unknown, out: ExtractedOTTL[], lc: any): void {
   if (!isMap(value)) return;
+  const procMode = scalarAt(value, "error_mode");
   const table = value.get("table", true);
   if (!isSeq(table)) return;
   for (const row of table.items) {
@@ -149,7 +163,7 @@ function walkRouting(compId: string, value: unknown, out: ExtractedOTTL[], lc: a
     for (const field of ["statement", "condition"]) {
       const n = row.get(field, true);
       if (isScalar(n)) {
-        pushScalar(n, out, lc, { component: compId, context: ctx, signal: null, dialect: field === "condition" ? "condition" : "statement", keyPath: `${compId}.table[].${field}` });
+        pushScalar(n, out, lc, { component: compId, context: ctx, signal: null, dialect: field === "condition" ? "condition" : "statement", keyPath: `${compId}.table[].${field}`, errorMode: procMode });
       }
     }
   }
@@ -202,11 +216,12 @@ export function stripOttlComments(text: string): string {
 export function collectStatementsForDryRun(
   yamlText: string,
   cursorLine: number
-): { statements: string; signal: string | null } {
+): { statements: string; signal: string | null; errorMode: string | null } {
   const stmts = extractOTTL(yamlText).filter((x) => x.dialect === "statement");
-  if (stmts.length === 0) return { statements: "", signal: null };
+  if (stmts.length === 0) return { statements: "", signal: null, errorMode: null };
   const atOrAbove = stmts.filter((s) => s.line <= cursorLine);
   const chosen = atOrAbove.length > 0 ? atOrAbove[atOrAbove.length - 1] : stmts[0];
   const group = stmts.filter((s) => s.component === chosen.component && s.signal === chosen.signal);
-  return { statements: group.map((s) => s.text).join("\n"), signal: chosen.signal };
+  // The error_mode of the statement group under the cursor (groups may override the processor's).
+  return { statements: group.map((s) => s.text).join("\n"), signal: chosen.signal, errorMode: chosen.errorMode };
 }

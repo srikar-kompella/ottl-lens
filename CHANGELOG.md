@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.1
+
+Correctness release.
+
+### `error_mode` now follows your config and your collector version
+0.2.0 called `propagate` "the default". That was true only for older collectors: the transform processor's default is **`propagate` up to v0.152 and `ignore` from v0.153** (feature gate `processor.transform.defaultErrorModeIgnore`: beta in v0.153, stable in v0.158, removed in v0.162 — checked in the contrib source for each version).
+
+- The dry-run reads `error_mode` from the block under your cursor (a statement group's own setting overrides the processor's), and the panel shows "from your config".
+- If the block doesn't set it, the dry-run uses `ignore` and tells you the default depends on your collector version.
+- An invalid value (`error_mode: ingore`) is reported: the collector would reject the config.
+
+### Experimental lambda functions
+`All`, `Any`, `Filter`, `Find`, `MapEach`, `MapKeys`, `Reduce` and `When` (moved to `pkg/ottl/xottl` upstream on 2026-09-28) are no longer flagged as unknown.
+- A note says they need the `ottl.functions.enableLambda` feature gate (alpha since v0.155.0, off by default) — without it the collector rejects the config.
+- Hover and autocomplete document them.
+- The lambda arrow `=>` is no longer reported as a single `=`.
+- The bundled engine (v0.146.0) can't run them; the dry-run now says exactly that instead of a lexer error.
+
+### Clearer syntax errors
+Engine syntax errors now point at the column and text that couldn't be read.
+
+### Catalog
+Regenerated from contrib `main` (2026-09-29), plus the experimental function reference and the OTTL feature-gate table.
+
 ## 0.2.0
 
 ### Per-statement trace

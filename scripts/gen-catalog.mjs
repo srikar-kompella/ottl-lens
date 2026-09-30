@@ -72,7 +72,7 @@ const FENCE = /^```[\w-]*\s*$/; // a fence line on its own (not an inline ```cod
  * Functions
  * ------------------------------------------------------------------ */
 
-function parseFunctions(text, label) {
+function parseFunctions(text, label, { requireBoth = true } = {}) {
   const lines = text.split(/\r?\n/);
   const editors = new Set();
   const converters = new Set();
@@ -121,7 +121,7 @@ function parseFunctions(text, label) {
       if ((details + p).length > 700) break;
       details += (details ? "\n\n" : "") + absolutizeLinks(p, FUNCS_URL);
     }
-    if (!summary) problems.push(`[${label}] no description for ${name}`);
+      if (!summary) problems.push(`[${label}] no description for ${name}`);
 
     const exStart = body.findIndex((l) => EXAMPLES_MARKER.test(l.trim()));
     const examples = [];
@@ -157,7 +157,7 @@ function parseFunctions(text, label) {
     if (current) current.body.push(line);
   }
   finish();
-  if (editors.size === 0 || converters.size === 0) {
+  if (requireBoth ? editors.size === 0 || converters.size === 0 : editors.size + converters.size === 0) {
     console.error(`[${label}] parse error: editors=${editors.size} converters=${converters.size}.`);
     process.exit(1);
   }
@@ -167,12 +167,42 @@ function parseFunctions(text, label) {
 const main = parseFunctions(readFileSync(funcsReadme, "utf8"), "main");
 const engine = engineReadme ? parseFunctions(readFileSync(engineReadme, "utf8"), engineVersion) : null;
 
-const mainNames = new Set([...main.editors, ...main.converters]);
+// Experimental functions (pkg/ottl/xottl): lambdas etc. Each section carries a note naming
+// the feature gate it needs; the gates' stage/version come from pkg/ottl/documentation.md.
+const xottlReadme = join(pkgDir, "xottl", "ottlfuncs", "README.md");
+const experimental = {};
+let xottl = null;
+if (existsSync(xottlReadme)) {
+  const text = readFileSync(xottlReadme, "utf8");
+  xottl = parseFunctions(text, "xottl", { requireBoth: false });
+  let current = null;
+  for (const line of text.split(/\r?\n/)) {
+    const h3 = /^###\s+([A-Za-z_][A-Za-z0-9_]*)/.exec(line);
+    if (h3) { current = h3[1]; continue; }
+    const gate = /requires the \[`([^`]+)`\]/.exec(line);
+    if (current && gate && !experimental[current]) experimental[current] = gate[1];
+  }
+} else {
+  problems.push("no xottl/ottlfuncs/README.md — experimental functions not included");
+}
+
+const featureGates = {};
+const gatesDoc = join(pkgDir, "documentation.md");
+if (existsSync(gatesDoc)) {
+  for (const row of readFileSync(gatesDoc, "utf8").split(/\r?\n/)) {
+    const c = row.split("|").slice(1, -1).map((x) => x.trim());
+    const id = /^`([^`]+)`$/.exec(c[0] ?? "");
+    if (id && c.length >= 4) featureGates[id[1]] = { stage: c[1], description: c[2], since: c[3] };
+  }
+}
+
+const mainNames = new Set([...main.editors, ...main.converters, ...(xottl ? [...xottl.editors, ...xottl.converters] : [])]);
 const engineNames = engine ? new Set([...engine.editors, ...engine.converters]) : mainNames;
 
-const editors = new Set([...main.editors, ...(engine?.editors ?? [])]);
-const converters = new Set([...main.converters, ...(engine?.converters ?? [])]);
-const docs = { ...(engine?.docs ?? {}), ...main.docs }; // latest wording wins
+const editors = new Set([...main.editors, ...(engine?.editors ?? []), ...(xottl?.editors ?? [])]);
+const converters = new Set([...main.converters, ...(engine?.converters ?? []), ...(xottl?.converters ?? [])]);
+const docs = { ...(engine?.docs ?? {}), ...(xottl?.docs ?? {}), ...main.docs }; // latest wording wins
+for (const [name, gate] of Object.entries(experimental)) if (docs[name]) docs[name].featureGate = gate;
 const notInEngine = [...mainNames].filter((n) => !engineNames.has(n));
 const removedUpstream = [...engineNames].filter((n) => !mainNames.has(n));
 
@@ -287,7 +317,24 @@ export interface FunctionDoc {
   examples: string[];
   /** Heading anchor in FUNCTIONS_DOC_URL. */
   anchor: string;
+  /** Experimental (xottl) functions: the feature gate that must be enabled. */
+  featureGate?: string;
 }
+
+export interface FeatureGate {
+  stage: string;
+  description: string;
+  /** Version the gate was introduced, e.g. v0.155.0. */
+  since: string;
+}
+
+/** OTTL feature gates, from pkg/ottl/documentation.md. */
+export const FEATURE_GATES: Readonly<Record<string, FeatureGate>> = ${JSON.stringify(featureGates, null, 2)};
+
+/** Experimental (xottl) functions and the feature gate each needs. */
+export const EXPERIMENTAL_FUNCTIONS: Readonly<Record<string, string>> = ${JSON.stringify(Object.fromEntries(sort(Object.keys(experimental)).map((k) => [k, experimental[k]])), null, 2)};
+
+export const XOTTL_DOC_URL = ${JSON.stringify(`${REPO}/xottl/ottlfuncs/README.md`)};
 
 export const FUNCTION_DOCS: Readonly<Record<string, FunctionDoc>> = ${JSON.stringify(docsSorted, null, 2)};
 
@@ -313,7 +360,8 @@ const target = resolve(__dirname, "..", "src", "ottl", "catalog.ts");
 writeFileSync(target, out, "utf8");
 console.log(
   `wrote ${target}\n  source=${source} engine=${engineVersion}\n  editors=${editors.size} converters=${converters.size} ` +
-  `paths=${paths.size} enums=${enums.size}\n  not-in-engine: ${sort(notInEngine).join(", ") || "-"}\n` +
+  `paths=${paths.size} enums=${enums.size}\n  experimental: ${Object.entries(experimental).map(([k, g]) => `${k}[${g}]`).join(", ") || "-"}\n` +
+  `  feature gates: ${Object.keys(featureGates).join(", ") || "-"}\n  not-in-engine: ${sort(notInEngine).join(", ") || "-"}\n` +
   `  removed-upstream: ${sort(removedUpstream).join(", ") || "-"}`
 );
 if (problems.length) console.warn("warnings:\n  " + problems.join("\n  "));

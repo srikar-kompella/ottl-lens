@@ -15,13 +15,16 @@ import {
   EDITORS,
   ENGINE_VERSION,
   ENUMS,
+  EXPERIMENTAL_FUNCTIONS,
   FUNCTION_DOCS,
   FUNCTIONS_DOC_URL,
   NOT_IN_ENGINE,
   REMOVED_UPSTREAM,
+  XOTTL_DOC_URL,
   type FunctionDoc,
 } from "./catalog";
 import { EXTRA_KNOWN, REMOVED_REPLACEMENTS } from "./extras";
+import { describeGate } from "./linter";
 import { segmentsAfter } from "./explain";
 
 export const CONTEXT_ROOTS = [
@@ -134,6 +137,10 @@ export function isOttlLine(lines: readonly string[], lineNo: number): boolean {
 
 function versionNotes(name: string): string[] {
   const notes: string[] = [];
+  const gate = EXPERIMENTAL_FUNCTIONS[name];
+  if (gate) {
+    notes.push(`🧪 Experimental — needs ${describeGate(gate)}. Enable it with \`--feature-gates=${gate}\`. [Experimental functions](${XOTTL_DOC_URL})`);
+  }
   if (NOT_IN_ENGINE.has(name)) {
     notes.push(`⚠️ Added after ${ENGINE_VERSION}, the version the bundled dry-run engine is built from — it lints fine, but the dry-run can't execute it yet.`);
   }
@@ -157,7 +164,7 @@ export function functionMarkdown(name: string): string | undefined {
   if (doc.details) parts.push(doc.details);
   if (doc.examples.length) parts.push("**Examples**\n\n" + doc.examples.map((e) => "- `" + e + "`").join("\n"));
   parts.push(...versionNotes(name));
-  parts.push(`[OTTL function reference](${FUNCTIONS_DOC_URL}#${doc.anchor})`);
+  parts.push(`[OTTL function reference](${EXPERIMENTAL_FUNCTIONS[name] ? XOTTL_DOC_URL : FUNCTIONS_DOC_URL}#${doc.anchor})`);
   return parts.filter(Boolean).join("\n\n");
 }
 
@@ -265,7 +272,8 @@ export function signatureSnippet(signature: string): string {
 function functionSuggestion(doc: FunctionDoc, sortPrefix: string): Suggestion {
   const newer = NOT_IN_ENGINE.has(doc.name);
   const removed = REMOVED_UPSTREAM.has(doc.name) && !EXTRA_KNOWN.has(doc.name);
-  const tag = newer ? ` · newer than ${ENGINE_VERSION} engine` : removed ? " · removed upstream" : "";
+  const experimental = EXPERIMENTAL_FUNCTIONS[doc.name] ? " · experimental (feature gate)" : "";
+  const tag = experimental || (newer ? ` · newer than ${ENGINE_VERSION} engine` : removed ? " · removed upstream" : "");
   return {
     label: doc.name,
     kind: "function",

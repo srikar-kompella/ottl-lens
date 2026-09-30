@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyError, explainEngineError, editDistance, segmentsAfter, suggestSegment, unqualifiedPath } from "./explain";
+import { classifyError, explainEngineError, editDistance, segmentsAfter, suggestSegment, unqualifiedPath, functionsIn } from "./explain";
 
 // Messages below are verbatim from the real engine (contrib v0.146.0).
 const UNKNOWN_NEWER =
@@ -34,6 +34,32 @@ describe("explainEngineError", () => {
 
   it("handles a known function that is not allowed in this context", () => {
     expect(explainEngineError(UNKNOWN_NEWER.replace(/"clear"$/, '"set"'))).toMatch(/can't be used in this context/);
+  });
+
+  it("mentions the feature gate for an experimental function the engine lacks", () => {
+    expect(explainEngineError(UNKNOWN_NEWER.replace(/"clear"$/, '"Filter"'))).toMatch(/needs the `ottl\.functions\.enableLambda` feature gate/);
+  });
+
+  it("explains a lambda the bundled engine can't lex (verbatim engine message)", () => {
+    const stmt = 'set(log.attributes["t"], Filter(log.attributes, (k, _) => k == "environment"))';
+    const msg = 'OTTL parse error: unable to infer a valid context (["resource" "scope" "log"]) from statements ["set(log.attributes[\\"t\\"], Filter(log.attributes, (k, _) => k == \\"environment\\"))"] and conditions []: statement has invalid syntax: 1:53: lexer: invalid input text "_) => k == \\"envi..."';
+    expect(explainEngineError(msg, stmt)).toMatch(/uses `Filter` with lambda syntax, which the bundled dry-run engine \(v0\.146\.0\) can't parse yet/);
+    expect(explainEngineError(msg, stmt)).toMatch(/ottl\.functions\.enableLambda/);
+  });
+
+  it("explains lambda syntax without a known newer function", () => {
+    const msg = "OTTL parse error: x: statement has invalid syntax: 1:30: lexer: invalid input text \"_) => v\"";
+    expect(explainEngineError(msg, "set(log.body, Mystery(x, (_, v) => v))")).toMatch(/Lambda syntax \(`=>`\) isn't supported/);
+  });
+
+  it("points at the column and text for an ordinary syntax error", () => {
+    const msg = 'OTTL parse error: x: statement has invalid syntax: 1:15: lexer: invalid input text "@@ oops"';
+    expect(explainEngineError(msg, "set(log.body, @@ oops)")).toBe("Syntax error at column 15: the engine couldn't read `@@ oops`.");
+    expect(explainEngineError("OTTL parse error: statement has invalid syntax: 1:5: unexpected token", "set((log.body")).toMatch(/Syntax error at column 5/);
+  });
+
+  it("lists the functions a statement calls, ignoring strings", () => {
+    expect(functionsIn('set(log.body, Concat(["Filter(", x], ""))')).toEqual(["set", "Concat"]);
   });
 
   it("recognises the undefined-function wording too", () => {

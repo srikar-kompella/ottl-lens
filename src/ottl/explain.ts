@@ -14,6 +14,7 @@ import {
   CASEFOLD_INDEX,
   CONTEXT_PATHS,
   ENGINE_VERSION,
+  EXPERIMENTAL_FUNCTIONS,
   KNOWN_FUNCTIONS,
   NOT_IN_ENGINE,
 } from "./catalog";
@@ -75,6 +76,12 @@ export function suggestSegment(prefix: string, segment: string): string | undefi
   return best && bestD <= Math.max(1, Math.min(3, Math.floor(segment.length / 3))) ? best : undefined;
 }
 
+/** Function names called in a statement (string contents ignored). */
+export function functionsIn(statement: string): string[] {
+  const masked = statement.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  return [...masked.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]);
+}
+
 const CONTEXT_NAMES = new Set(["log", "span", "spanevent", "metric", "datapoint", "resource", "instrumentation_scope", "scope", "profile"]);
 
 /**
@@ -111,7 +118,11 @@ export function explainEngineError(message: string, statement = ""): string | un
   if (m) {
     const name = m[1] ?? m[2];
     if (NOT_IN_ENGINE.has(name)) {
-      return `\`${name}\` is a real OTTL function, but it was added after ${ENGINE_VERSION}, the version the bundled dry-run engine is built from, so it can't be executed here yet. Collectors on newer versions support it.`;
+      const gate = EXPERIMENTAL_FUNCTIONS[name];
+      return `\`${name}\` is a real OTTL function, but it was added after ${ENGINE_VERSION}, the version the bundled dry-run engine is built from, so it can't be executed here yet. ` +
+        (gate
+          ? `On newer collectors it's experimental and needs the \`${gate}\` feature gate.`
+          : "Collectors on newer versions support it.");
     }
     if (!KNOWN_FUNCTIONS.has(name)) {
       const fix = CASEFOLD_INDEX.get(name.toLowerCase());
@@ -132,6 +143,24 @@ export function explainEngineError(message: string, statement = ""): string | un
     return fix
       ? `\`${shown}\` isn't a valid path. Did you mean \`${before}.${fix}\`?`
       : `\`${shown}\` isn't a valid path${before ? ` — valid fields after \`${before}.\` include ${segmentsAfter(before).slice(0, 6).map((s) => "`" + s + "`").join(", ")}` : ""}.`;
+  }
+
+  // Syntax errors. The bundled engine can't lex syntax added after it (lambdas: `(k, v) => …`),
+  // so blame the newer feature when the statement uses one.
+  const syntax = /statement has invalid syntax: (\d+):(\d+): (?:lexer: )?([\s\S]*)$/.exec(message);
+  if (syntax) {
+    const col = Number(syntax[2]);
+    const newer = functionsIn(statement).find((n) => NOT_IN_ENGINE.has(n));
+    if (newer) {
+      const gate = EXPERIMENTAL_FUNCTIONS[newer];
+      return `This statement uses \`${newer}\`${/=>/.test(statement) ? " with lambda syntax" : ""}, which the bundled dry-run engine (${ENGINE_VERSION}) can't parse yet. ` +
+        (gate ? `On newer collectors it's experimental and needs the \`${gate}\` feature gate.` : "Collectors on newer versions support it.");
+    }
+    if (/=>/.test(statement)) {
+      return `Lambda syntax (\`=>\`) isn't supported by the bundled dry-run engine (${ENGINE_VERSION}). Newer collectors support it behind the \`ottl.functions.enableLambda\` feature gate.`;
+    }
+    const near = /invalid input text "([^"]{0,24})/.exec(syntax[3])?.[1] ?? statement.slice(Math.max(0, col - 1), col + 15);
+    return `Syntax error at column ${col}: the engine couldn't read \`${near.replace(/\\"/g, '"').trim()}\`.`;
   }
 
   // The engine reports an unqualified path and a statement with no path identically;

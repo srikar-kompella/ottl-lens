@@ -163,7 +163,50 @@ describe("collectStatementsForDryRun", () => {
       "    log_conditions:",
       '      - IsMatch(log.body, ".*x.*")',
     ].join("\n");
-    expect(collectStatementsForDryRun(filterOnly, 3)).toEqual({ statements: "", signal: null });
+    expect(collectStatementsForDryRun(filterOnly, 3)).toEqual({ statements: "", signal: null, errorMode: null });
+  });
+});
+
+describe("error_mode extraction", () => {
+  const cfg = [
+    "processors:",                                // 0
+    "  transform/a:",                             // 1
+    "    error_mode: propagate",                  // 2
+    "    log_statements:",                        // 3
+    "      - context: log",                       // 4
+    "        statements:",                        // 5
+    '          - set(log.body, "a")',             // 6
+    "      - context: log",                       // 7
+    "        error_mode: silent",                 // 8
+    "        statements:",                        // 9
+    '          - set(log.body, "b")',             // 10
+    "  transform/flat:",                          // 11
+    "    trace_statements:",                      // 12
+    '      - set(span.name, "x")',                // 13
+    "connectors:",                                // 14
+    "  routing:",                                 // 15
+    "    error_mode: ignore",                     // 16
+    "    table:",                                 // 17
+    "      - statement: route() where true",      // 18
+  ].join("\n");
+  const byText = (t: string) => extractOTTL(cfg).find((x) => x.text.includes(t))!;
+
+  it("uses the processor-level error_mode", () => {
+    expect(byText('"a"').errorMode).toBe("propagate");
+  });
+  it("lets a statement group override it", () => {
+    expect(byText('"b"').errorMode).toBe("silent");
+  });
+  it("is null when the config doesn't set it", () => {
+    expect(byText("span.name").errorMode).toBeNull();
+  });
+  it("reads the routing connector's error_mode", () => {
+    expect(byText("route()").errorMode).toBe("ignore");
+  });
+  it("returns the error_mode of the group under the cursor for dry-run", () => {
+    expect(collectStatementsForDryRun(cfg, 6).errorMode).toBe("propagate");
+    expect(collectStatementsForDryRun(cfg, 10).errorMode).toBe("silent");
+    expect(collectStatementsForDryRun(cfg, 13).errorMode).toBeNull();
   });
 });
 

@@ -9,6 +9,8 @@ import {
   baselineStatement,
   knownNoOpHint,
   describeError,
+  isErrorMode,
+  DEFAULT_ERROR_MODE_NOTE,
   type EvalFn,
 } from "./trace";
 
@@ -275,13 +277,29 @@ describe("traceStatements", () => {
     expect(r.steps[0].note).toMatch(/\.string suffix/);
   });
 
-  it("reports an engine error with the error_mode consequence and stops", () => {
-    const r = traceStatements(['set(a, "1")', "boom()", 'set(b, "2")'].join("\n"), "logs", PAYLOAD, engine);
+  it("under propagate, reports a runtime error as a dropped record and stops", () => {
+    const r = traceStatements(['set(a, "1")', "boom()", 'set(b, "2")'].join("\n"), "logs", PAYLOAD, engine, "propagate");
     expect(r.ok).toBe(false);
     expect(r.steps).toHaveLength(2);            // stops after the failure
     expect(r.steps[1].verdict).toBe("error");
     expect(r.steps[1].error).toBe("engine exploded");
     expect(r.steps[1].consequence).toMatch(/DROPPED/);
+    expect(r.steps[1].consequence).toMatch(/default before v0\.153/);
+  });
+
+  it("defaults to ignore, like collectors since v0.153", () => {
+    const r = traceStatements(['set(a, "1")', "boom()", 'set(b, "2")'].join("\n"), "logs", PAYLOAD, engine);
+    expect(r.steps.map((s) => s.verdict)).toEqual(["changed", "error", "changed"]);
+    expect(r.steps[1].consequence).toMatch(/default since v0\.153/);
+  });
+
+  it("recognises valid error_mode values", () => {
+    expect(isErrorMode("ignore")).toBe(true);
+    expect(isErrorMode("propagate")).toBe(true);
+    expect(isErrorMode("silent")).toBe(true);
+    expect(isErrorMode("loud")).toBe(false);
+    expect(isErrorMode(null)).toBe(false);
+    expect(DEFAULT_ERROR_MODE_NOTE).toMatch(/ignore on v0\.153 and later, propagate on v0\.152 and earlier/);
   });
 
   it("uses the supplied error_mode in the consequence text", () => {

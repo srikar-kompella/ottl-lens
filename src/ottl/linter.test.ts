@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lint, Diagnostic } from "./linter";
+import { lint, Diagnostic, describeGate } from "./linter";
 
 const codes = (ds: Diagnostic[]) => ds.map((d) => d.code);
 const onLine = (ds: Diagnostic[], line: number) => ds.filter((d) => d.line === line);
@@ -182,5 +182,29 @@ describe("removed and newer functions", () => {
 
   it("accepts component-scoped and profiles functions", () => {
     expect(lint('set(log.attributes["p"], ProfileID(x))')).toEqual([]);
+  });
+});
+
+describe("lambdas (experimental, xottl)", () => {
+  const stmt = 'set(log.attributes["prod_tags"], Filter(log.attributes["tags"], (_, v) => v == "prod"))';
+
+  it("does not mistake the lambda arrow for a single '='", () => {
+    expect(lint(stmt).filter((d) => d.code === "ottl.singleEquals")).toEqual([]);
+  });
+
+  it("accepts lambda functions and notes the feature gate they need", () => {
+    const d = lint(stmt);
+    expect(d.filter((x) => x.severity !== "info")).toEqual([]);
+    const info = d.find((x) => x.code === "ottl.experimentalFunction")!;
+    expect(info.message).toMatch(/"Filter" is experimental and needs the `ottl\.functions\.enableLambda` feature gate \(alpha since v0\.155\.0, off by default\)/);
+    expect(info.message).toMatch(/--feature-gates=ottl\.functions\.enableLambda/);
+  });
+
+  it("still flags a real single '='", () => {
+    expect(codes(lint('set(log.body, x) where a = 1'))).toContain("ottl.singleEquals");
+  });
+
+  it("describes unknown gates plainly", () => {
+    expect(describeGate("made.up")).toBe("the `made.up` feature gate");
   });
 });

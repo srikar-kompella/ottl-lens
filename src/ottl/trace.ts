@@ -221,16 +221,29 @@ export function diffJSON(before: unknown, after: unknown, path = ""): DiffEntry[
  * ------------------------------------------------------------------ */
 
 /**
+ * The transform processor's default error_mode changed (verified in contrib source):
+ * `propagate` up to v0.152; `ignore` from v0.153 (feature gate
+ * processor.transform.defaultErrorModeIgnore: beta v0.153, stable v0.158, removed v0.162).
+ */
+export const DEFAULT_ERROR_MODE_NOTE =
+  "This block doesn't set error_mode, so the collector's default applies: ignore on v0.153 and later, " +
+  "propagate on v0.152 and earlier. The dry-run uses ignore. Set error_mode explicitly to get the same behaviour on every version.";
+
+export function isErrorMode(x: unknown): x is ErrorMode {
+  return x === "propagate" || x === "ignore" || x === "silent";
+}
+
+/**
  * What actually happens to this telemetry record when a statement fails at RUNTIME.
- * `propagate` is the default and the dangerous one: it discards the record.
+ * `propagate` is the dangerous one: it discards the record.
  * (error_mode does not apply to config/parse errors — see describeError.)
  */
 export function describeErrorMode(mode: ErrorMode): string {
   switch (mode) {
     case "propagate":
-      return "With error_mode: propagate (the default), this record would be DROPPED from the pipeline.";
+      return "With error_mode: propagate (the default before v0.153), this record would be DROPPED from the pipeline.";
     case "ignore":
-      return "With error_mode: ignore, the error is logged and the remaining statements still run — the trace continues without this statement.";
+      return "With error_mode: ignore (the default since v0.153), the error is logged and the remaining statements still run — the trace continues without this statement.";
     case "silent":
       return "With error_mode: silent, the error is swallowed with no log line — you would never see this in production. The trace continues without this statement.";
   }
@@ -311,14 +324,15 @@ export function knownNoOpHint(statement: string): string | undefined {
  * @param signal         logs | traces | metrics
  * @param payloadJSON    input OTLP JSON
  * @param evalFn         engine call (injected for testability)
- * @param errorMode      the block's error_mode; defaults to OTTL's own default
+ * @param errorMode      the block's error_mode; defaults to the transform processor's
+ *                       current default (`ignore` since v0.153)
  */
 export function traceStatements(
   statementsText: string,
   signal: string,
   payloadJSON: string,
   evalFn: EvalFn,
-  errorMode: ErrorMode = "propagate"
+  errorMode: ErrorMode = "ignore"
 ): TraceResult {
   const statements = splitStatements(statementsText);
   if (statements.length === 0) {

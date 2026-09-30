@@ -25,11 +25,11 @@ OTTL Lens does that loop in the editor, in about a second, with the same transfo
 | **Paste what you already have** | The payload box accepts OTLP JSON, JSON Lines from the file exporter, or **raw `debug` exporter output** straight from `docker logs` — converted automatically, with the signal detected from the content. |
 | **Realistic samples** | Nine built-in payloads shaped around real transforms: a k8s log with a JSON body and PII, health-check noise, an errored HTTP span with an exception event, a SQL span with an email in the query, counters, histograms. |
 | **Errors you can act on** | Engine errors are translated: `log.atributes` → *did you mean `log.attributes`?*, `parsejson` → *did you mean `ParseJSON`?*, `attributes["x"]` → *needs its context prefix*. Config errors ("the collector won't start") are kept separate from runtime errors ("what `error_mode` does"). |
-| **`error_mode` that actually changes the result** | With `propagate` (the default), a runtime error drops the record and the trace stops. With `ignore` or `silent`, the trace continues past the failed statement — as a collector would. |
+| **`error_mode` that actually changes the result** | The dry-run uses your block's own `error_mode`. With `propagate`, a runtime error drops the record and the trace stops; with `ignore` or `silent`, the trace continues past the failed statement, as a collector would. If your config doesn't set it, you're told the default depends on your collector version: `ignore` since v0.153, `propagate` before. |
 | **Hover docs** | Hover any function, path or enum: signature, description, examples and a link to the upstream reference. Paths show their type (`log.severity_number` → `int64`). |
 | **Autocomplete** | Functions with argument placeholders (editors only at the start of a statement), context fields after `log.` / `span.` / `metric.` / `datapoint.` / `resource.`, enums and keywords. Works while the YAML is half-typed. |
 | **Collector-YAML aware linting** | Finds and lints OTTL in `transform` / `filter` processors (flat, advanced and legacy shapes) and the `routing` connector, on the right lines. Unknown / mis-cased functions, unbalanced delimiters, single `=`, unterminated strings, empty `where`. |
-| **Version-aware** | The function catalog is the union of the latest OTTL reference and the version the bundled engine is built from. Functions removed upstream get a migration hint (`Base64Decode` → `Decode(value, "base64")`); functions newer than the engine are accepted by the linter and flagged in hover. |
+| **Version-aware** | The function catalog is the union of the latest OTTL reference and the version the bundled engine is built from. Functions removed upstream get a migration hint (`Base64Decode` → `Decode(value, "base64")`); functions newer than the engine are accepted by the linter and flagged in hover. Experimental lambda functions (`Filter`, `MapEach`, `Reduce`, …) are recognised, with a note that they need the `ottl.functions.enableLambda` feature gate. |
 | Syntax highlighting | For `.ottl` files. |
 
 ## Getting started
@@ -75,7 +75,7 @@ The engine runs entirely offline in the extension host via WebAssembly — no ne
 
 ## Known limitations
 
-- **The bundled engine is built from contrib `v0.146.0`.** Functions added later (`clear`, `IsEmpty`, `Coalesce`, `stringify_all`, `Base64Encode`) lint and document fine, but the dry-run can't execute them yet — the panel says so rather than showing a confusing engine error.
+- **The bundled engine is built from contrib `v0.146.0`.** Functions added later (`clear`, `IsEmpty`, `Coalesce`, `stringify_all`, `Base64Encode`, and the experimental lambda functions) lint and document fine, but the dry-run can't execute them yet — the panel says so rather than showing a confusing engine error. Multi-version support is on the roadmap.
 - **Statements without any path can't be dry-run** (e.g. `convert_gauge_to_sum(...)`). The engine infers each statement's context from its paths; in a collector config you would set `context:` on the block.
 - **The dry-run executes statements, not filter conditions.** Filter conditions are linted, documented and autocompleted.
 - **`ignore`/`silent` are simulated per statement.** If a statement fails for only some records, a real collector would still apply it to the others; the dry-run skips it for all of them.

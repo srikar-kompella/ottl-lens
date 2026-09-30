@@ -2,7 +2,7 @@
   "name": "ottl-lens",
   "displayName": "OTTL Lens (community)",
   "description": "Per-statement dry-run with the real OTTL engine, hover docs, autocomplete and linting for the OpenTelemetry Transformation Language (OTTL) in Collector YAML. Community project, not affiliated with or endorsed by the OpenTelemetry project or CNCF.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "srikar-kompella",
   "license": "Apache-2.0",
   "icon": "media/icon.png",
@@ -84,6 +84,7 @@
     "coverage": "vitest run --coverage",
     "gen:catalog": "node scripts/gen-catalog.mjs",
     "build:wasm": "bash scripts/build-wasm.sh",
+    "verify:engine": "node scripts/verify-engine.mjs",
     "bundle": "node esbuild.js",
     "vscode:prepublish": "node esbuild.js"
   },

@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   EDITORS, CONVERTERS, KNOWN_FUNCTIONS, CASEFOLD_INDEX, FUNCTION_DOCS, CONTEXT_PATHS, ENUMS,
-  NOT_IN_ENGINE, REMOVED_UPSTREAM, ENGINE_VERSION,
+  NOT_IN_ENGINE, REMOVED_UPSTREAM, ENGINE_VERSION, EXPERIMENTAL_FUNCTIONS, FEATURE_GATES,
 } from "./catalog";
 
 describe("catalog", () => {
   it("has the expected editor and converter counts (regen if OTTL changes)", () => {
     // Union of contrib main (2026-09-29) and the bundled engine's reference (v0.146.0).
     expect(EDITORS.size).toBe(17);
-    expect(CONVERTERS.size).toBe(98);
+    expect(CONVERTERS.size).toBe(106); // incl. 8 experimental (xottl) lambda functions
   });
 
   it("includes known editors and converters", () => {
@@ -38,7 +38,9 @@ describe("catalog — version metadata (verified against the real engine)", () =
   });
 
   it("lists functions the bundled engine rejects", () => {
-    expect([...NOT_IN_ENGINE].sort()).toEqual(["Base64Encode", "Coalesce", "IsEmpty", "clear", "stringify_all"]);
+    expect([...NOT_IN_ENGINE].sort()).toEqual([
+      "All", "Any", "Base64Encode", "Coalesce", "Filter", "Find", "IsEmpty", "MapEach", "MapKeys", "Reduce", "When", "clear", "stringify_all",
+    ]);
   });
 
   it("lists functions removed from the latest reference", () => {
@@ -76,5 +78,17 @@ describe("catalog — docs, paths, enums", () => {
     const warn = ENUMS.find((e) => e.name === "SEVERITY_NUMBER_WARN");
     expect(warn?.value).toBe(13);
     expect(ENUMS.find((e) => e.name === "METRIC_DATA_TYPE_SUM")?.value).toBe(2);
+  });
+});
+
+describe("catalog — experimental functions and feature gates", () => {
+  it("lists the lambda functions with their gate", () => {
+    expect(Object.keys(EXPERIMENTAL_FUNCTIONS).sort()).toEqual(["All", "Any", "Filter", "Find", "MapEach", "MapKeys", "Reduce", "When"]);
+    for (const g of Object.values(EXPERIMENTAL_FUNCTIONS)) expect(g).toBe("ottl.functions.enableLambda");
+    expect(FUNCTION_DOCS.Filter.featureGate).toBe("ottl.functions.enableLambda");
+    expect(FUNCTION_DOCS.Filter.signature).toBe("Filter(source, predicate)");
+  });
+  it("records gate stage and version from upstream docs", () => {
+    expect(FEATURE_GATES["ottl.functions.enableLambda"]).toMatchObject({ stage: "alpha", since: "v0.155.0" });
   });
 });

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { evalOTTL } from "../ottl/wasmRunner";
 import { collectStatementsForDryRun } from "../ottl/yaml";
-import { traceStatements, summarize, type ErrorMode } from "../ottl/trace";
+import { traceStatements, summarize, isErrorMode, DEFAULT_ERROR_MODE_NOTE, type ErrorMode } from "../ottl/trace";
 import { SAMPLES, samplePayloadText } from "../ottl/samples";
 import { normalizePayloadInput, describeConversion } from "../ottl/payload";
 
@@ -23,6 +23,10 @@ export class DryRunPanel {
   private currentStatements = "";
   /** Signal of the YAML transform block the statements came from, if any. */
   private currentBlockSignal: string | null = null;
+  /** The block's error_mode from the config (null when not set). */
+  private currentBlockErrorMode: string | null = null;
+  /** Statements came from Collector YAML (so a missing error_mode is meaningful). */
+  private currentFromYaml = false;
 
   private constructor(_context: vscode.ExtensionContext) {
     this.panel = vscode.window.createWebviewPanel(VIEW_TYPE, PANEL_TITLE, {
@@ -73,15 +77,18 @@ export class DryRunPanel {
    * Gather the OTTL statements to run from the active editor:
    * a whole `.ottl` file, or the transform block at the cursor in a Collector YAML.
    */
-  private collectInput(editor: vscode.TextEditor | undefined): { text: string; signal: string | null } {
-    if (!editor) return { text: "", signal: null };
+  private collectInput(
+    editor: vscode.TextEditor | undefined
+  ): { text: string; signal: string | null; errorMode: string | null; fromYaml: boolean } {
+    const none = { text: "", signal: null, errorMode: null, fromYaml: false };
+    if (!editor) return none;
     const doc = editor.document;
-    if (doc.languageId === "ottl") return { text: doc.getText(), signal: null };
+    if (doc.languageId === "ottl") return { ...none, text: doc.getText() };
     if (doc.languageId === "yaml" || doc.languageId === "yml") {
       const r = collectStatementsForDryRun(doc.getText(), editor.selection.active.line);
-      return { text: r.statements, signal: r.signal };
+      return { text: r.statements, signal: r.signal, errorMode: r.errorMode, fromYaml: true };
     }
-    return { text: "", signal: null };
+    return none;
   }
 
   private pushStatements(): void {
@@ -90,10 +97,13 @@ export class DryRunPanel {
     // Keep the statements we last captured instead of wiping them.
     if (!editor) return;
     const filename = editor.document.fileName.split(/[\\/]/).pop() ?? "";
-    const { text, signal } = this.collectInput(editor);
+    const { text, signal, errorMode, fromYaml } = this.collectInput(editor);
     this.currentStatements = text;
     this.currentBlockSignal = signal;
-    void this.panel.webview.postMessage({ type: "statements", text, filename, signal });
+    this.currentBlockErrorMode = errorMode;
+    this.currentFromYaml = fromYaml;
+    const configErrorMode = isErrorMode(errorMode) ? errorMode : null;
+    void this.panel.webview.postMessage({ type: "statements", text, filename, signal, errorMode: configErrorMode, fromYaml });
   }
 
   private handleRun(selectedSignal: string, payloadText: string, errorMode: ErrorMode): void {
@@ -101,6 +111,8 @@ export class DryRunPanel {
     const fresh = this.collectInput(vscode.window.activeTextEditor);
     const statements = fresh.text || this.currentStatements;
     const blockSignal = fresh.text ? fresh.signal : this.currentBlockSignal;
+    const blockErrorMode = fresh.text ? fresh.errorMode : this.currentBlockErrorMode;
+    const fromYaml = fresh.text ? fresh.fromYaml : this.currentFromYaml;
     if (!statements.trim()) {
       this.post({
         type: "result",
@@ -129,6 +141,10 @@ export class DryRunPanel {
         `Heads up: this transform block handles ${blockSignal}, but the payload is ${signal}. ` +
         `Statements written for ${blockSignal} will not find ${blockSignal} fields in ${signal} data.`
       );
+    }
+    if (fromYaml && !blockErrorMode) notes.push(DEFAULT_ERROR_MODE_NOTE);
+    if (fromYaml && blockErrorMode && !isErrorMode(blockErrorMode)) {
+      notes.push(`\`error_mode: ${blockErrorMode}\` isn't a valid value — use ignore, propagate or silent. The collector would reject this config.`);
     }
     notes.push(...input.warnings);
 
@@ -266,6 +282,7 @@ export function buildHtml(): string {
   }
   button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground)); }
   #exec-time { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
+  #mode-source { font-size: 0.78em; color: var(--vscode-descriptionForeground); }
   /* minmax(0, …) lets columns shrink below their content; long statements scroll inside their box. */
   #main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
   /* A "Beside" editor column is often narrow: stack the panes instead of crushing the results. */
@@ -387,12 +404,13 @@ export function buildHtml(): string {
     </select>
   </label>
   <label>error_mode:
-    <select id="error-mode" title="How the collector reacts when a statement errors. OTTL's default is propagate, which discards the record.">
-      <option value="propagate">propagate (default)</option>
-      <option value="ignore">ignore</option>
+    <select id="error-mode" title="How the transform processor reacts when a statement fails at runtime. The default is ignore since collector v0.153, and propagate (which drops the record) before that.">
+      <option value="ignore">ignore (default since v0.153)</option>
+      <option value="propagate">propagate (default before v0.153)</option>
       <option value="silent">silent</option>
     </select>
   </label>
+  <span id="mode-source"></span>
   <button id="run-btn">▶ Run</button>
   <span id="exec-time"></span>
 </div>
@@ -436,6 +454,8 @@ const CUSTOM = '';
 
 const signalEl = document.getElementById('signal');
 const errorModeEl = document.getElementById('error-mode');
+const modeSourceEl = document.getElementById('mode-source');
+errorModeEl.addEventListener('change', () => { modeSourceEl.textContent = 'set here'; });
 const sampleEl = document.getElementById('sample');
 const sampleHintEl = document.getElementById('sample-hint');
 const openFileBtn = document.getElementById('open-file');
@@ -658,8 +678,18 @@ window.addEventListener('message', (event) => {
       statementsEmpty.style.display = 'block';
       filenameEl.textContent = '—';
     }
-    // Moving the cursor re-sends statements; only clear results if they changed.
-    if (msg.text !== lastStatements) clearOutput();
+    // Moving the cursor re-sends statements; only reset when the block changed,
+    // so a manual error_mode choice survives cursor moves within the same block.
+    if (msg.text !== lastStatements) {
+      clearOutput();
+      if (msg.errorMode) {
+        errorModeEl.value = msg.errorMode;
+        modeSourceEl.textContent = 'from your config';
+      } else {
+        errorModeEl.value = 'ignore';
+        modeSourceEl.textContent = msg.fromYaml ? 'not set in config · default depends on version' : '';
+      }
+    }
     lastStatements = msg.text;
     return;
   }
