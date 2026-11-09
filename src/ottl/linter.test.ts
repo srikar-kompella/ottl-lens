@@ -288,3 +288,22 @@ describe("0.4: list arguments and component functions", () => {
     ]) expect(lint(s).filter((x) => x.code === "ottl.unknownFunction"), s).toEqual([]);
   });
 });
+
+describe("missing prefixes in inferred transform blocks", () => {
+  it.each([
+    ["logs", "log.attributes"],
+    ["traces", "span.attributes"],
+    ["metrics", "datapoint.attributes"],
+  ])("suggests a context for %s first", (inferredSignal, replacement) => {
+    const statement = 'set(attributes["env"], "prod")';
+    const diagnostic = lint(statement, { inferredSignal }).find((d) => d.code === "ottl.missingContext");
+    expect(diagnostic?.fix).toMatchObject({ start: 4, end: 14, replacement });
+    expect(diagnostic?.alternativeFixes?.map((fix) => fix.replacement)).toContain("resource.attributes");
+  });
+
+  it("ignores qualified paths, strings, comments and unsupported fields", () => {
+    const statement = 'set(log.attributes["env"], "attributes[env]") # attributes["ignored"]';
+    expect(lint(statement, { inferredSignal: "logs" })).toEqual([]);
+    expect(lint('set(unknown["env"], "prod")', { inferredSignal: "logs" })).toEqual([]);
+  });
+});

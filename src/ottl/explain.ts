@@ -111,7 +111,7 @@ export function functionsIn(statement: string): string[] {
   return [...masked.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)].map((m) => m[1]);
 }
 
-const CONTEXT_NAMES = new Set(["log", "span", "spanevent", "metric", "datapoint", "resource", "instrumentation_scope", "scope", "profile"]);
+export const CONTEXT_NAMES = new Set(["log", "span", "spanevent", "metric", "datapoint", "resource", "instrumentation_scope", "scope", "profile"]);
 
 /**
  * First unqualified path in a statement (e.g. `attributes` in `set(attributes["a"], 1)`),

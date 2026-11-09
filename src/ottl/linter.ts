@@ -16,7 +16,7 @@ import { KNOWN_FUNCTIONS, CASEFOLD_INDEX } from "./catalog";
 import { EXTRA_KNOWN, REMOVED_REPLACEMENTS } from "./extras";
 import { REMOVED_UPSTREAM, EXPERIMENTAL_FUNCTIONS, FEATURE_GATES, FUNCTION_DOCS } from "./catalog";
 import { checkTypes, type Fix } from "./typecheck";
-import { segmentsAfter, suggestSegment } from "./explain";
+import { CONTEXT_NAMES, segmentsAfter, suggestSegment } from "./explain";
 
 export type { Fix };
 
@@ -39,6 +39,7 @@ export interface Diagnostic {
   code: string;
   /** A safe, mechanical fix for this diagnostic (offered as a quick fix). Columns on the same line. */
   fix?: Fix;
+  alternativeFixes?: Fix[];
 }
 
 /** Index of a `#` comment outside string literals, or the line length. */
@@ -331,9 +332,48 @@ function checkSliceArguments(masked: string, raw: string, line: number, diags: D
   }
 }
 
+const SIGNAL_CONTEXTS = new Map([
+  ["logs", ["log", "resource", "scope"]],
+  ["traces", ["span", "spanevent", "resource", "scope"]],
+  ["metrics", ["datapoint", "metric", "resource", "scope"]],
+  ["profiles", ["profile", "resource", "scope"]],
+]);
+
+function checkContextPrefixes(masked: string, line: number, signal: string, diags: Diagnostic[]): void {
+  const contexts = SIGNAL_CONTEXTS.get(signal);
+  if (!contexts) return;
+
+  for (const match of masked.matchAll(/(?<![\w.])([a-z_][a-z0-9_]*)(?=\s*[[.])/g)) {
+    const [field] = match;
+    if (CONTEXT_NAMES.has(field)) continue;
+    const start = match.index;
+    const end = start + field.length;
+    const [fix, ...alternativeFixes] = contexts
+      .filter((context) => segmentsAfter(context).includes(field))
+      .map((context) => {
+        const replacement = context + "." + field;
+        return { title: "Use " + replacement, start, end, replacement };
+      });
+    if (!fix) continue;
+
+    diags.push({
+      line,
+      startCol: start,
+      endCol: end,
+      message: '"' + field + '" needs a context prefix in this transform block.',
+      severity: "warning",
+      code: "ottl.missingContext",
+      fix,
+      alternativeFixes,
+    });
+  }
+}
+
 export interface LintOptions {
   /** Warn on functions not in the known OTTL catalog. Default true. */
   unknownFunctions?: boolean;
+  /** Signal of a transform YAML block that uses inferred context. */
+  inferredSignal?: string;
 }
 
 export function lint(text: string, opts: LintOptions = {}): Diagnostic[] {
@@ -358,6 +398,7 @@ export function lint(text: string, opts: LintOptions = {}): Diagnostic[] {
     checkSingleEquals(masked, idx, diags);
     checkEmptyWhere(masked, idx, diags);
     checkPaths(masked, idx, diags);
+    if (opts.inferredSignal) checkContextPrefixes(masked, idx, opts.inferredSignal, diags);
     // Type checks need the literal values, so they run on the raw line (comments stripped).
     const code = raw.slice(0, commentStart(raw));
     for (const t of checkTypes(code)) {

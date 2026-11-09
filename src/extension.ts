@@ -16,6 +16,7 @@ interface DocFix {
   title: string;
   range: vscode.Range;
   replacement: string;
+  preferred?: boolean;
 }
 
 /** Fixes from the latest lint of each document, keyed by URI. */
@@ -53,12 +54,15 @@ function lintDocument(doc: vscode.TextDocument, collection: vscode.DiagnosticCol
     if (d.fix && canEdit) {
       const line = lineOffset + d.line;
       const base = d.line === 0 ? colOffset : 0;
-      fixes.push({
-        diagnostic: diag,
-        title: d.fix.title,
-        range: new vscode.Range(line, base + d.fix.start, line, base + d.fix.end),
-        replacement: d.fix.replacement,
-      });
+      for (const fix of [d.fix, ...(d.alternativeFixes ?? [])]) {
+        fixes.push({
+          diagnostic: diag,
+          title: fix.title,
+          range: new vscode.Range(line, base + fix.start, line, base + fix.end),
+          replacement: fix.replacement,
+          preferred: fix === d.fix,
+        });
+      }
     }
   };
 
@@ -78,7 +82,10 @@ function lintDocument(doc: vscode.TextDocument, collection: vscode.DiagnosticCol
     for (const ex of extracted) {
       // Fixes are only offered where text offsets map 1:1 onto the document.
       const canEdit = editableInPlace(ex);
-      for (const d of lint(ex.text, opts)) add(d, ex.line, ex.col, canEdit && d.line === 0);
+      const inferredSignal = ex.context === null && /^transform(\/|$)/.test(ex.component)
+        ? ex.signal ?? undefined
+        : undefined;
+      for (const d of lint(ex.text, { ...opts, inferredSignal })) add(d, ex.line, ex.col, canEdit && d.line === 0);
     }
     // Processor settings around the OTTL (deprecated / conflicting keys).
     for (const c of configIssues(doc.getText())) {
@@ -111,7 +118,7 @@ class QuickFixes implements vscode.CodeActionProvider {
         action.edit = new vscode.WorkspaceEdit();
         action.edit.replace(doc.uri, f.range, f.replacement);
         action.diagnostics = [f.diagnostic];
-        action.isPreferred = true;
+        action.isPreferred = f.preferred ?? true;
         return action;
       });
   }

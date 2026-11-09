@@ -146,6 +146,11 @@ const typoStmt = 'set(log.atributes["a"], "1")';
 const typoDiag = L.lint(typoStmt).find((d) => d.code === "ottl.unknownPath");
 check("path typo quick fix produces a working statement", !!typoDiag && trace(fixed(typoStmt, typoDiag), "logs", LOG).steps[0].verdict === "changed");
 
+const bareStmt = 'set(attributes["env"], "prod")';
+const bareDiag = L.lint(bareStmt, { inferredSignal: "logs" }).find((d) => d.code === "ottl.missingContext");
+check("context prefix quick fix produces a working statement",
+  !!bareDiag && trace(fixed(bareStmt, bareDiag), "logs", LOG).steps[0].verdict === "changed");
+
 // 7. propagate wording and the redaction check, on real output.
 const rt2 = trace('set(log.attributes["j"], ParseJSON(log.body))', "logs", sample("logs-simple"), "propagate").steps[0];
 check("propagate consequence says the whole batch is dropped", /whole batch/.test(rt2.consequence ?? ""), rt2.consequence);
