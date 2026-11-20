@@ -39,6 +39,8 @@ OTTL Lens does that loop in the editor, in about a second, with the same transfo
 | **Version-aware** | The catalog is generated from contrib v0.164.1 (OTTL 1.x stable), including the transform processor's own functions (`convert_gauge_to_sum`, `extract_count_metric`, `ParseCEF`, …) and the filter processor's (`HasAttrOnDatapoint`). Hover says when a function appeared; if you run one on an engine that predates it, the dry-run says which version you need. Removed functions get a migration hint (`Base64Decode` → `Decode(value, "base64")`). |
 | Syntax highlighting | For `.ottl` files. |
 
+See [OTTL behaviour by Collector version](VERSION_CHANGES.md) for the upgrade boundaries, examples and upstream release references.
+
 ## Getting started
 
 1. Install **OTTL Lens**:
