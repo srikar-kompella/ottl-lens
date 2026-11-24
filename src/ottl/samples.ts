@@ -114,7 +114,70 @@ export const SAMPLES: readonly Sample[] = [
       },
     ]),
   },
-
+  {
+    id: "logs-cef",
+    label: "CEF security event",
+    signal: "logs",
+    hint: 'Try set(log.attributes["cef"], ParseCEF(log.body)).',
+    payload: logs([{
+      timeUnixNano: T0,
+      severityNumber: 17,
+      severityText: "ERROR",
+      body: {
+        stringValue:
+          "CEF:0|Security|Firewall|1.0|100|Login Failed|5|src=192.168.1.10 dst=10.0.0.5",
+      },
+      attributes: [],
+    }]),
+  },
+  {
+    id: "logs-clf",
+    label: "CLF web access log",
+    signal: "logs",
+    hint: 'Try set(log.attributes["clf"], ParseCLF(log.body)).',
+    payload: logs([{
+      timeUnixNano: T0,
+      severityNumber: 9,
+      severityText: "INFO",
+      body: {
+        stringValue:
+          '192.168.1.10 - frank [10/Oct/2026:13:55:36 +0000] "GET /index.html HTTP/1.1" 200 2326',
+      },
+      attributes: [],
+    }]),
+  },
+  {
+    id: "logs-elf",
+    label: "ELF web access log",
+    signal: "logs",
+    hint: 'Try set(log.attributes["elf"], ParseELF(log.body)).',
+    payload: logs([{
+      timeUnixNano: T0,
+      severityNumber: 9,
+      severityText: "INFO",
+      body: {
+        stringValue:
+          "#Version: 1.0\n#Fields: date time cs-method cs-uri-stem sc-status\n2026-11-23 13:55:36 GET /index.html 200",
+      },
+      attributes: [],
+    }]),
+  },
+  {
+    id: "logs-leef",
+    label: "LEEF security event",
+    signal: "logs",
+    hint: 'Try set(log.attributes["leef"], ParseLEEF(log.body)).',
+    payload: logs([{
+      timeUnixNano: T0,
+      severityNumber: 17,
+      severityText: "ERROR",
+      body: {
+        stringValue:
+          "LEEF:2.0|Security|Firewall|1.0|100|\tsrc=192.168.1.10\tdst=10.0.0.5\tdevTime=Nov 23 2026 13:55:36",
+      },
+      attributes: [],
+    }]),
+  },
   /* ----------------------------- traces ----------------------------- */
   {
     id: "traces-simple",
